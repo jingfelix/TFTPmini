@@ -1,8 +1,8 @@
 .PHONY:
 all:
 	@echo "compiling..."
-	gcc -o bin/client client.c
-	gcc -o bin/server server.c
+	gcc -g -o bin/client client.c
+	gcc -g -o bin/server server.c
 
 .PHONY:
 clean:
