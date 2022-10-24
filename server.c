@@ -33,7 +33,6 @@ int main(int argc, char *argv[])
     }
 
     printf("ready to receive data!\n");
-    // handle_udp_msg(server_fd);   //处理接收到的数据
 
     char buf[sizeof(unsigned short) + TFTP_MAX_SIZE + TFTP_MAX_SIZE];
 
@@ -62,11 +61,18 @@ int main(int argc, char *argv[])
         switch (type)
         {
         case RRQ:
-            /* code */
             flag = tftp_rrq_handler(server_fd, buf, recv_count, &client_addr);
+            if (flag < 0)
+            {
+                printf("tftp_rrq_handler error!\n");
+            }
             break;
         case WRQ:
-
+            // flag = tftp_wrq_handler(server_fd, buf, recv_count, &client_addr);
+            if (flag < 0)
+            {
+                printf("tftp_wrq_handler error!\n");
+            }
             break;
         
         default:

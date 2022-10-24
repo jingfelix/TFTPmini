@@ -61,5 +61,8 @@ int print_tftp_packet(char *buf, int len);
 // get type(opcode) from tftp packet buf
 unsigned short get_tftp_packet_type(char *buf);
 
-// get file name from tftp packet buf
-char *get_tftp_packet_filename(char *buf);
+// get block number from tftp packet buf
+unsigned short get_tftp_packet_block(char *buf);
+
+// RRQ handler for server
+int tftp_rrq_handler(int server_fd, char *buf, int recv_count, struct sockaddr_in *client_addr);

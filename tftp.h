@@ -251,27 +251,27 @@ int tftp_rrq_handler(int server_fd, char *buf, int recv_count, struct sockaddr_i
 
             // 这里有个很大的问题，发送的时候是否会绑定端口？？？？？？？
             // 同理，tftp客户端在接收的时候是否应该切换目标端口？？？？？？？
+            // 答：是
             d_printf("sending data\n");
             sendto(send_socket, buf, buf_size, 0, (struct sockaddr *)client_addr, client_addr_len);
             d_printf("send data packet, block: %u, data_len: %d\n", block, read_count);
-
             free(buf);
         }
 
         char recv_buf[TFTP_MAX_SIZE * 2] = {0};
 
-        recv_count = recvfrom(send_socket, buf, TFTP_MAX_SIZE, 0, (struct sockaddr *)client_addr, &client_addr_len);
+        recv_count = recvfrom(send_socket, &recv_buf[0], TFTP_MAX_SIZE, 0, (struct sockaddr *)client_addr, &client_addr_len);
 
         unsigned short type = get_tftp_packet_type(buf);
 
-        if (get_tftp_packet_type(buf) != ACK || get_tftp_packet_block(buf) != block)
+        if (get_tftp_packet_type(&recv_buf[0]) != ACK || get_tftp_packet_block(&recv_buf[0]) != block)
         {
             // send error msg
-            print_tftp_packet(buf, recv_count);
+            print_tftp_packet(&recv_buf[0], recv_count);
             d_printf("type error or block error\n");
             return -1;
         }
-
+        
         block++;
     }
 }
