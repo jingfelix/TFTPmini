@@ -200,7 +200,7 @@ int tftp_rrq_handler(int server_fd, char *buf, int recv_count, struct sockaddr_i
     */
     d_printf("filename: %s\n", filename);
 
-    int fd = open(filename, O_RDWR, 0666);
+    int fd = open(filename, O_RDONLY, 0666);
     if (fd < 0)
     {
         d_printf("open file error!\n");
@@ -271,7 +271,88 @@ int tftp_rrq_handler(int server_fd, char *buf, int recv_count, struct sockaddr_i
             d_printf("type error or block error\n");
             return -1;
         }
-        
+
         block++;
     }
+}
+
+int send_rrq(int client_fd, struct sockaddr_in *ser_addr, char *filename)
+{
+    // build RRQ packet
+    struct tftp_packet packet = {0};
+    packet.opcode = htons(RRQ);
+    packet.u.request.filename = filename;
+    packet.u.request.filename_len = strlen(filename) + 1;
+    char mode[] = "netascii";
+    packet.u.request.mode = &mode[0];
+    packet.u.request.mode_len = strlen(mode) + 1;
+
+    char *buf = NULL;
+
+    int buf_size = make_tftp_packet(&packet, RRQ, &buf);
+    d_printf("buf_size: %d\n", buf_size);
+
+    sendto(client_fd, buf, buf_size, 0, (struct sockaddr *)ser_addr, sizeof(ser_addr));
+
+    free(buf);
+
+    // enter recv loop
+    unsigned short block = 0;
+    int fd = open(filename, O_WRONLY | O_CREAT, 0666);
+    if (fd < 0)
+    {
+        d_printf("open file error!\n");
+        return -1;
+    }
+
+    char* recv_buf = malloc(TFTP_MAX_SIZE * 2);
+    int recv_count = 0;
+    unsigned short block = 0;
+    // NOTICE: send ACK to this address
+    struct sockaddr_in ser_addr_new = {0};
+    socklen_t ser_addr_len = sizeof(struct sockaddr_in);
+    while (1)
+    {
+        // One BIG problem: how to restore the data received properly?
+        recv_count = recvfrom(client_fd, recv_buf, TFTP_MAX_SIZE, 0, (struct sockaddr *)&ser_addr_new, &ser_addr_len);
+
+        if (recv_count < 0 || get_tftp_packet_type(recv_buf) != DATA || get_tftp_packet_block(recv_buf) != block)
+        {
+            // send error msg
+            d_printf("recv error!\n");
+            free(recv_buf);
+            close(fd);
+            return -1;
+        }
+        else if (recv_count > 0)
+        {
+            // write data to file
+            // well, actually, we should check after write
+            write(fd, recv_buf + sizeof(unsigned short) * 2, recv_count - sizeof(unsigned short) * 2);
+        }
+
+        // NOTICE: remember to deal with recv_count == 0
+        // which indicates end of the whole program
+        // send ACK
+        struct tftp_packet ack_pkt = {0};
+        ack_pkt.opcode = htons(ACK);
+        ack_pkt.u.ack.block = htons(block);
+
+        char *ack_buf = NULL;
+        int ack_buf_size = make_tftp_packet(&ack_pkt, ACK, &ack_buf);
+        d_printf("ack_buf_size: %d\n", ack_buf_size);
+
+        if (recv_count == 0)
+        {
+            d_printf("recv data end\n");
+            break;
+        }
+        free(ack_buf);
+        block++;
+    }
+
+    free(recv_buf);
+    close(fd);
+
+    return 0;
 }

@@ -45,12 +45,13 @@ int main(int argc, char *argv[])
         return -1;
     }
 
-    socklen_t ser_len;
-    ser_len = sizeof(ser_addr);
+    
 
     /*
     while (1)
     {
+        socklen_t ser_len;
+        ser_len = sizeof(ser_addr);
 
         struct tftp_packet pckt = {0};
         pckt.opcode = htons(RRQ);
@@ -76,27 +77,6 @@ int main(int argc, char *argv[])
     */
     if (strcmp(argv[1], "get") == 0)
     {
-        struct tftp_packet pckt = {0};
-        pckt.opcode = htons(RRQ);
-        pckt.u.request.filename = filename;
-        pckt.u.request.filename_len = strlen(pckt.u.request.filename) + 1;
-        char mode[] = "netascii";
-        pckt.u.request.mode = &mode[0];
-        pckt.u.request.mode_len = strlen(pckt.u.request.mode) + 1;
-
-        char *buf = NULL;
-
-        int buf_len = make_tftp_packet(&pckt, RRQ, &buf);
-        d_printf("buf_len: %d\n", buf_len);
-
-        sendto(client_fd, buf, buf_len, 0, (struct sockaddr *)&ser_addr, ser_len);
-
-        int flag = print_tftp_packet(buf, buf_len);
-        d_printf("flag: %d\n", flag);
-        free(buf);
-
-        // TODO: 进入循环，接收数据
-
 
     }
     else if (strcmp(argv[1], "put") == 0)

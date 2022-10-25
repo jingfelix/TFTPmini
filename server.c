@@ -1,5 +1,4 @@
 #include "tftp.h"
-#include <stdio.h>
 
 #define SERVER_PORT 69
 #define BUFF_LEN 1024
