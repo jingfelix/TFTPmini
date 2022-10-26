@@ -291,14 +291,17 @@ int send_rrq(int client_fd, struct sockaddr_in *ser_addr, char *filename)
 
     int buf_size = make_tftp_packet(&packet, RRQ, &buf);
     d_printf("buf_size: %d\n", buf_size);
+    print_tftp_packet(buf, buf_size);
 
-    sendto(client_fd, buf, buf_size, 0, (struct sockaddr *)ser_addr, sizeof(ser_addr));
+    socklen_t ser_len;
+    ser_len = sizeof(*ser_addr);
 
+    int msg = sendto(client_fd, buf, buf_size, 0, (struct sockaddr *)ser_addr, ser_len);
+    d_printf("sent RRQ packet; MSG: %d\n", msg);
     free(buf);
 
     // enter recv loop
-    unsigned short block = 0;
-    int fd = open(filename, O_WRONLY | O_CREAT, 0666);
+    int fd = open("main.c", O_WRONLY | O_CREAT, 0666);
     if (fd < 0)
     {
         d_printf("open file error!\n");
@@ -307,18 +310,28 @@ int send_rrq(int client_fd, struct sockaddr_in *ser_addr, char *filename)
 
     char* recv_buf = malloc(TFTP_MAX_SIZE * 2);
     int recv_count = 0;
-    unsigned short block = 0;
+    unsigned short block = 1;
     // NOTICE: send ACK to this address
     struct sockaddr_in ser_addr_new = {0};
-    socklen_t ser_addr_len = sizeof(struct sockaddr_in);
+    socklen_t ser_addr_len = sizeof(ser_addr_new);
     while (1)
     {
         // One BIG problem: how to restore the data received properly?
-        recv_count = recvfrom(client_fd, recv_buf, TFTP_MAX_SIZE, 0, (struct sockaddr *)&ser_addr_new, &ser_addr_len);
+        // CURRENT BUG: recv_count == -1, WHY?
+        recv_count = recvfrom(client_fd, recv_buf, TFTP_MAX_SIZE*2, 0, (struct sockaddr *)&ser_addr_new, &ser_addr_len);
 
         if (recv_count < 0 || get_tftp_packet_type(recv_buf) != DATA || get_tftp_packet_block(recv_buf) != block)
         {
             // send error msg
+
+            unsigned short type = get_tftp_packet_type(recv_buf);
+            unsigned short recv_block = get_tftp_packet_block(recv_buf);
+
+            d_printf("recv_count: %d\n", recv_count);
+            d_printf("type: %d\n", type);
+            d_printf("recv_block: %d\n", recv_block);
+            d_printf("current_block: %d\n", block);
+
             d_printf("recv error!\n");
             free(recv_buf);
             close(fd);
@@ -329,6 +342,7 @@ int send_rrq(int client_fd, struct sockaddr_in *ser_addr, char *filename)
             // write data to file
             // well, actually, we should check after write
             write(fd, recv_buf + sizeof(unsigned short) * 2, recv_count - sizeof(unsigned short) * 2);
+            d_printf("write data to file, block: %u , data_len: %ld\n", block, recv_count - sizeof(unsigned short) * 2);
         }
 
         // NOTICE: remember to deal with recv_count == 0
@@ -340,9 +354,11 @@ int send_rrq(int client_fd, struct sockaddr_in *ser_addr, char *filename)
 
         char *ack_buf = NULL;
         int ack_buf_size = make_tftp_packet(&ack_pkt, ACK, &ack_buf);
-        d_printf("ack_buf_size: %d\n", ack_buf_size);
+        // d_printf("ack_buf_size: %d\n", ack_buf_size);
 
-        if (recv_count == 0)
+        int ack_msg = sendto(client_fd, ack_buf, ack_buf_size, 0, (struct sockaddr *)&ser_addr_new, ser_addr_len);
+
+        if (recv_count == 0 || recv_count < TFTP_MAX_SIZE)
         {
             d_printf("recv data end\n");
             break;

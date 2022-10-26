@@ -22,10 +22,14 @@ int main(int argc, char *argv[])
     memset(ip, 0, TFTP_MAX_SIZE);
     strcpy(ip, argv[3]);
 
+    d_printf("ip: %s", ip);
+
     // get filename
     char *filename = (char *)malloc(TFTP_MAX_SIZE);
     memset(filename, 0, TFTP_MAX_SIZE);
     strcpy(filename, argv[2]);
+
+    d_printf("filename: %s", filename);
 
     struct sockaddr_in ser_addr;
     memset(&ser_addr, 0, sizeof(ser_addr));
@@ -77,7 +81,19 @@ int main(int argc, char *argv[])
     */
     if (strcmp(argv[1], "get") == 0)
     {
-
+        int flag = send_rrq(client_fd, &ser_addr, filename);
+        if (flag < 0)
+        {
+            d_printf("send_rrq failed!\n");
+            free(ip);
+            free(filename);
+            close(client_fd);
+            return -1;
+        }
+        else
+        {
+            d_printf("send_rrq success!\n");
+        }
     }
     else if (strcmp(argv[1], "put") == 0)
     {
