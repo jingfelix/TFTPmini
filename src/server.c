@@ -67,7 +67,7 @@ int main(int argc, char *argv[])
             }
             break;
         case WRQ:
-            // flag = tftp_wrq_handler(server_fd, buf, recv_count, &client_addr);
+            flag = tftp_wrq_handler(server_fd, buf, recv_count, &client_addr);
             if (flag < 0)
             {
                 printf("tftp_wrq_handler error!\n");

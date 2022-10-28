@@ -1,4 +1,4 @@
-#include "include.h"
+#include "tftp.h"
 
 /*
     pack tftp packet into buffer
@@ -173,6 +173,12 @@ unsigned short get_tftp_packet_block(char *buf)
     return block;
 }
 
+int get_tftp_filename(char* buf, char *filename)
+{
+
+    return 0;
+}
+
 int tftp_rrq_handler(int server_fd, char *buf, int recv_count, struct sockaddr_in *client_addr)
 {
 
@@ -276,6 +282,49 @@ int tftp_rrq_handler(int server_fd, char *buf, int recv_count, struct sockaddr_i
     }
 }
 
+int tftp_wrq_handler(int server_fd, char *buf, int recv_count, struct sockaddr_in *client_addr)
+{
+    char* filename = NULL;
+
+    // TODO: get filename
+
+    // send ack 0 first
+    socklen_t client_addr_len = sizeof(struct sockaddr_in);
+    
+    int send_socket = socket(AF_INET, SOCK_DGRAM, 0);
+
+    struct tftp_packet ack_pkt = {0};
+    ack_pkt.opcode = htons(ACK);
+    ack_pkt.u.ack.block = htons(0);
+
+    buf = NULL;
+    int buf_size = make_tftp_packet(&ack_pkt, ACK, &buf);
+    if (buf_size < 0)
+    {
+        d_printf("make ack packet error!\n");
+        return -1;
+    }
+
+    int ack_msg = sendto(send_socket, buf, buf_size, 0, (struct sockaddr *)client_addr, client_addr_len);
+    if (ack_msg < 0)
+    {
+        d_printf("send ack error!\n");
+        return -1;
+    }
+
+    // enter main loop, receive data and send ack
+
+    unsigned short block = 1;
+    while (1)
+    {
+        
+    }
+
+
+
+    return 0;
+}
+
 int send_rrq(int client_fd, struct sockaddr_in *ser_addr, char *filename)
 {
     // build RRQ packet
@@ -301,7 +350,7 @@ int send_rrq(int client_fd, struct sockaddr_in *ser_addr, char *filename)
     free(buf);
 
     // enter recv loop
-    int fd = open("main.c", O_WRONLY | O_CREAT, 0666);
+    int fd = open(filename, O_WRONLY | O_CREAT, 0666);
     if (fd < 0)
     {
         d_printf("open file error!\n");

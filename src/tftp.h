@@ -1,3 +1,4 @@
+#pragma once
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -66,3 +67,9 @@ unsigned short get_tftp_packet_block(char *buf);
 
 // RRQ handler for server
 int tftp_rrq_handler(int server_fd, char *buf, int recv_count, struct sockaddr_in *client_addr);
+
+// WRQ handler for server
+int tftp_wrq_handler(int server_fd, char *buf, int recv_count, struct sockaddr_in *client_addr);
+
+// send RRQ for client
+int send_rrq(int client_fd, struct sockaddr_in *ser_addr, char *filename);
