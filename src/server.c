@@ -22,7 +22,7 @@ int main(int argc, char *argv[])
     memset(&ser_addr, 0, sizeof(ser_addr));
     ser_addr.sin_family = AF_INET;
     ser_addr.sin_addr.s_addr = inet_addr("0.0.0.0"); // IP地址，需要进行网络序转换，INADDR_ANY：本地地址
-    ser_addr.sin_port = htons(SERVER_PORT);       //端口号，需要网络序转换
+    ser_addr.sin_port = htons(SERVER_PORT);          //端口号，需要网络序转换
 
     int ret = bind(server_fd, (struct sockaddr *)&ser_addr, sizeof(ser_addr));
     if (ret < 0)
@@ -41,6 +41,7 @@ int main(int argc, char *argv[])
     int recv_count;
     while (1)
     {
+        d_printf("********ENTERING LOOP********\n");
         memset(buf, 0, BUFF_LEN);
         len = sizeof(client_addr);
         recv_count = recvfrom(server_fd, buf, BUFF_LEN, 0, (struct sockaddr *)&client_addr, &len);
@@ -73,21 +74,15 @@ int main(int argc, char *argv[])
                 printf("tftp_wrq_handler error!\n");
             }
             break;
-        
+
         default:
             break;
         }
-
 
         memset(buf, 0, BUFF_LEN);
     }
 
     // has to deal with different request
-
-
-
-
-
 
     close(server_fd);
     return 0;

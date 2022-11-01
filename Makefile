@@ -5,7 +5,7 @@ TARGET=bin
 .PHONY:
 build:
 	@echo "compiling..."
-	$(CC) -Os -Wl,--gc-sections -o $(TARGET)/client src/client.c $(SRC)/tftp.c
+	$(CC) -Os -Wl,--gc-sections -o $(TARGET)/client $(SRC)/client.c $(SRC)/tftp.c
 	$(CC) -Os -Wl,--gc-sections -o $(TARGET)/server $(SRC)/server.c $(SRC)/tftp.c
 
 .PHONY:
