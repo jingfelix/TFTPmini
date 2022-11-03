@@ -5,6 +5,12 @@
     return the length of the buffer
     return -1 if error
 */
+
+static void sig_alarm_handler(int signo)
+{
+    return;
+}
+
 int make_tftp_packet(struct tftp_packet *packet, int type, char **ptr)
 {
     int ptr_size = 0;
@@ -329,7 +335,7 @@ int tftp_wrq_handler(int server_fd, char *buf, int recv_count, struct sockaddr_i
     unsigned short block = 1;
     char recv_buf[TFTP_MAX_SIZE * 2] = {0};
     while (1)
-    {   
+    {
         // receive data from client
         memset(recv_buf, 0, TFTP_MAX_SIZE * 2);
         recv_count = recvfrom(send_socket, &recv_buf[0], TFTP_MAX_SIZE * 2, 0, (struct sockaddr *)client_addr, &client_addr_len);
@@ -470,7 +476,7 @@ int send_rrq(int client_fd, struct sockaddr_in *ser_addr, char *filename)
                 close(fd);
                 return -1;
             }
-            
+
             d_printf("write data to file, block: %u , data_len: %ld\n", block, recv_count - sizeof(unsigned short) * 2);
         }
 
@@ -498,6 +504,148 @@ int send_rrq(int client_fd, struct sockaddr_in *ser_addr, char *filename)
 
     free(recv_buf);
     close(fd);
+
+    return 0;
+}
+
+int send_wrq(int client_fd, struct sockaddr_in *ser_addr, char *filename)
+{
+    // build WRQ packet
+    struct tftp_packet packet = {0};
+    packet.opcode = htons(WRQ);
+    packet.u.request.filename = filename;
+    packet.u.request.filename_len = strlen(filename) + 1;
+    char mode[] = "netascii";
+    packet.u.request.mode = &mode[0];
+    packet.u.request.mode_len = strlen(mode) + 1;
+
+    char *buf = NULL;
+
+    int buf_size = make_tftp_packet(&packet, WRQ, &buf);
+    d_printf("buf_size: %d\n", buf_size);
+    print_tftp_packet(buf, buf_size);
+
+    socklen_t ser_len;
+    ser_len = sizeof(*ser_addr);
+
+    int msg = sendto(client_fd, buf, buf_size, 0, (struct sockaddr *)ser_addr, ser_len);
+    d_printf("sent WRQ packet; MSG: %d\n", msg);
+    free(buf);
+
+    // enter send loop
+    int fd = open(filename, O_RDWR | O_CREAT, 0666);
+    if (fd < 0)
+    {
+        d_printf("open file error!\n");
+        return -1;
+    }
+
+    char *recv_buf = malloc(TFTP_MAX_SIZE * 2);
+    int recv_count = 0;
+    // NOTICE: in WRQ, the first block received is 0
+    unsigned short block = 0;
+    struct sockaddr_in ser_addr_new = {0};
+    socklen_t ser_addr_len = sizeof(ser_addr_new);
+
+    // signal for exceeding time
+    struct sigaction sa_alarm;
+    sa_alarm.sa_handler = sig_alarm_handler;
+    sa_alarm.sa_flags = SA_RESETHAND;
+
+    int end_flag = 0;
+    while (1)
+    {
+        memset(recv_buf, 0, TFTP_MAX_SIZE * 2);
+        sigaction(SIGALRM, &sa_alarm, NULL);
+        alarm(5);
+        recv_count = recvfrom(client_fd, recv_buf, TFTP_MAX_SIZE * 2, 0, (struct sockaddr *)&ser_addr_new, &ser_addr_len);
+
+        // handling error messages
+        if (recv_count < 0 || get_tftp_packet_type(recv_buf) != ACK || get_tftp_packet_block(recv_buf) != block)
+        {
+            // send error msg
+
+            unsigned short type = get_tftp_packet_type(recv_buf);
+            unsigned short recv_block = get_tftp_packet_block(recv_buf);
+
+            d_printf("recv_count: %d\n", recv_count);
+            d_printf("type: %d\n", type);
+            d_printf("recv_block: %d\n", recv_block);
+            d_printf("current_block: %d\n", block);
+
+            d_printf("recv error!\n");
+            free(recv_buf);
+            close(fd);
+            return -1;
+        }
+        else
+        {
+            // read data from file
+            char *data_buf = malloc(TFTP_MAX_SIZE);
+            int data_len = read(fd, data_buf, TFTP_MAX_SIZE);
+            if (data_len < 0)
+            {
+                if (block == 1)
+                    d_printf("Send end\n");
+                else
+                    d_printf("read file error! block: %u\n", block);
+                free(recv_buf);
+                free(data_buf);
+                close(fd);
+                return -1;
+            }
+            else if (data_len < TFTP_MAX_SIZE && data_len != 0)
+            {
+                d_printf("read file end! block: %u\n", block);
+                end_flag = 1;
+            }
+            else if (data_len == 0)
+            {
+                // send a data packet with 0 length
+                d_printf("read file end\n");
+                if (end_flag == 1)
+                {
+                    free(recv_buf);
+                    free(data_buf);
+                    close(fd);
+                    return 0;
+                }
+                else
+                {
+                    end_flag = 1;
+                }
+            }
+
+            block++;
+
+            struct tftp_packet data_pkt = {0};
+            data_pkt.opcode = htons(DATA);
+            data_pkt.u.data.block = htons(block);
+            data_pkt.u.data.data = data_buf;
+            data_pkt.u.data.data_len = data_len;
+
+            char *data_buf_new = NULL;
+            int data_buf_size = make_tftp_packet(&data_pkt, DATA, &data_buf_new);
+            d_printf("data_buf_size: %d\n", data_buf_size);
+            if (data_buf_size < 0)
+            {
+                d_printf("make data packet error!\n");
+                free(recv_buf);
+                close(fd);
+                return -1;
+            }
+
+            int data_msg = sendto(client_fd, data_buf_new, data_buf_size, 0, (struct sockaddr *)&ser_addr_new, ser_addr_len);
+            if (data_msg < 0)
+            {
+                d_printf("send data error!\n");
+                free(recv_buf);
+                free(data_buf_new);
+                close(fd);
+                return -1;
+            }
+        }
+    }
 
     return 0;
 }

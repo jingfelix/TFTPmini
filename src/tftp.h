@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <fcntl.h>
+#include <signal.h>
 
 #define TFTP_MAX_SIZE 512
 #define RRQ 1
@@ -73,3 +74,6 @@ int tftp_wrq_handler(int server_fd, char *buf, int recv_count, struct sockaddr_i
 
 // send RRQ for client
 int send_rrq(int client_fd, struct sockaddr_in *ser_addr, char *filename);
+
+// send WRQ for client
+int send_wrq(int client_fd, struct sockaddr_in *ser_addr, char *filename);

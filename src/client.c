@@ -97,6 +97,19 @@ int main(int argc, char *argv[])
     }
     else if (strcmp(argv[1], "put") == 0)
     {
+        int flag = send_wrq(client_fd, &ser_addr, filename);
+        if (flag < 0)
+        {
+            d_printf("send_wrq failed!\n");
+            free(ip);
+            free(filename);
+            close(client_fd);
+            return -1;
+        }
+        else
+        {
+            d_printf("send_wrq success!\n");
+        }
     }
     else
     {
