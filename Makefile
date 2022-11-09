@@ -16,5 +16,6 @@ clean:
 .PHONY:
 debug:
 	@echo "compiling debug target"
-	$(CC) -g -o $(TARGET)/client $(SRC)/client.c $(SRC)/tftp.c
-	$(CC) -g -o $(TARGET)/server $(SRC)/server.c $(SRC)/tftp.c
+	$(CC) -g -D DEBUG -o $(TARGET)/client $(SRC)/client.c $(SRC)/tftp.c
+	$(CC) -g -D DEBUG -o $(TARGET)/server $(SRC)/server.c $(SRC)/tftp.c
+	

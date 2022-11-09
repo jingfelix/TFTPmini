@@ -18,6 +18,16 @@ int main(int argc, char *argv[])
         return -1;
     }
 
+    // setup timeout
+    struct timeval timeout;
+    timeout.tv_sec = 5;
+    timeout.tv_usec = 0;
+    if (setsockopt(server_fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) < 0)
+    {
+        perror("setsockopt failed\n");
+        return -1;
+    }
+
     struct sockaddr_in ser_addr;
     memset(&ser_addr, 0, sizeof(ser_addr));
     ser_addr.sin_family = AF_INET;

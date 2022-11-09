@@ -13,7 +13,11 @@ int main(int argc, char *argv[])
 
     if (argc < 4)
     {
-        printf("Usage: tftp get <filename> <ip>\n");
+        printf("Usage: tftp get <filename> <ip> <mode>\n");
+        printf("       tftp put <filename> <ip> <mode>\n\n");
+        printf("- filename: the file to be transfered or downloaded\n");
+        printf("- ip: the ip address of the server\n");
+        printf("- mode: netascii, octet\n");
         return -1;
     }
 
@@ -39,6 +43,21 @@ int main(int argc, char *argv[])
 
     int client_fd;
     client_fd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (client_fd < 0)
+    {
+        printf("create socket fail!\n");
+        return -1;
+    }
+
+    // setup timeout
+    struct timeval timeout;
+    timeout.tv_sec = 5;
+    timeout.tv_usec = 0;
+    if (setsockopt(client_fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) < 0)
+    {
+        perror("setsockopt failed\n");
+        return -1;
+    }
 
     if (ser_addr.sin_addr.s_addr == INADDR_NONE || client_fd < 0)
     {
@@ -49,39 +68,25 @@ int main(int argc, char *argv[])
         return -1;
     }
 
-    
-
-    /*
-    while (1)
+    char _mode;
+    if (argc == 4)
+        _mode = 0;
+    else if (strcmp(argv[4], "n") == 0)
+        _mode = 1;
+    else if (strcmp(argv[4], "o") == 0)
+        _mode = 0;
+    else
     {
-        socklen_t ser_len;
-        ser_len = sizeof(ser_addr);
-
-        struct tftp_packet pckt = {0};
-        pckt.opcode = htons(RRQ);
-        char filename[] = "main.c";
-        pckt.u.request.filename = &filename[0];
-        pckt.u.request.filename_len = strlen(pckt.u.request.filename) + 1;
-        char mode[] = "netascii";
-        pckt.u.request.mode = &mode[0];
-        pckt.u.request.mode_len = strlen(pckt.u.request.mode) + 1;
-
-        char *buf = NULL;
-
-        int buf_len = make_tftp_packet(&pckt, RRQ, &buf);
-        d_printf("buf_len: %d\n", buf_len);
-
-        sendto(client_fd, buf, buf_len, 0, (struct sockaddr *)&ser_addr, ser_len);
-
-        int flag = print_tftp_packet(buf, buf_len);
-        d_printf("flag: %d\n", flag);
-        sleep(1); // send msg every 1 second
-        free(buf);
+        printf("Invalid mode!Please use 'n' for netascii or 'o' for octet\n");
+        free(ip);
+        free(filename);
+        close(client_fd);
+        return -1;
     }
-    */
     if (strcmp(argv[1], "get") == 0)
     {
-        int flag = send_rrq(client_fd, &ser_addr, filename);
+        printf("receving file %s from %s:%d\n", filename, ip, SERVER_PORT);
+        int flag = send_rrq(client_fd, &ser_addr, filename, _mode);
         if (flag < 0)
         {
             d_printf("send_rrq failed!\n");
@@ -97,7 +102,8 @@ int main(int argc, char *argv[])
     }
     else if (strcmp(argv[1], "put") == 0)
     {
-        int flag = send_wrq(client_fd, &ser_addr, filename);
+        printf("sending file %s to %s:%d\n", filename, ip, SERVER_PORT);
+        int flag = send_wrq(client_fd, &ser_addr, filename, _mode);
         if (flag < 0)
         {
             d_printf("send_wrq failed!\n");
