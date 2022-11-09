@@ -9,7 +9,8 @@
 #include <stdio.h>
 #include <string.h>
 #include <fcntl.h>
-#include <signal.h>
+#include <time.h>
+#include <sys/time.h>
 
 #define TFTP_MAX_SIZE 512
 #define RRQ 1
@@ -18,8 +19,13 @@
 #define ACK 4
 #define ERROR 5
 
+#ifdef DEBUG
 #define d_printf printf
+#endif
 
+#ifndef DEBUG
+#define d_printf _dprintf
+#endif
 struct tftp_packet
 {
     unsigned short opcode;
@@ -73,7 +79,9 @@ int tftp_rrq_handler(int server_fd, char *buf, int recv_count, struct sockaddr_i
 int tftp_wrq_handler(int server_fd, char *buf, int recv_count, struct sockaddr_in *client_addr);
 
 // send RRQ for client
-int send_rrq(int client_fd, struct sockaddr_in *ser_addr, char *filename);
+int send_rrq(int client_fd, struct sockaddr_in *ser_addr, char *filename, char _mode);
 
 // send WRQ for client
-int send_wrq(int client_fd, struct sockaddr_in *ser_addr, char *filename);
+int send_wrq(int client_fd, struct sockaddr_in *ser_addr, char *filename, char _mode);
+
+void _dprintf(const char *format, ...);

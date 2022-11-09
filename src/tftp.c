@@ -6,11 +6,6 @@
     return -1 if error
 */
 
-static void sig_alarm_handler(int signo)
-{
-    return;
-}
-
 int make_tftp_packet(struct tftp_packet *packet, int type, char **ptr)
 {
     int ptr_size = 0;
@@ -77,9 +72,9 @@ int print_tftp_packet(char *buf, int len)
 
     for (int i = 0; i < len; i++)
     {
-        printf("%02x ", buf[i]);
+        d_printf("%02x ", buf[i]);
     }
-    printf("\n");
+    d_printf("\n");
 
     unsigned short type;
     memcpy(&type, buf, sizeof(unsigned short));
@@ -89,65 +84,65 @@ int print_tftp_packet(char *buf, int len)
     switch (type)
     {
     case DATA:
-        printf("TYPE: DATA");
+        d_printf("TYPE: DATA");
         memcpy(&block, buf, sizeof(unsigned short));
         block = ntohs(block);
-        printf("BLOCK: %u\n", block);
+        d_printf("BLOCK: %u\n", block);
         for (int i = 2; i < len; i++)
         {
-            printf("%02x", buf[i]);
+            d_printf("%02x", buf[i]);
         }
-        printf("\n");
+        d_printf("\n");
         break;
     case ACK:
-        printf("TYPE: ACK");
+        d_printf("TYPE: ACK");
         memcpy(&block, buf, sizeof(unsigned short));
         block = ntohs(block);
-        printf("BLOCK: %u\n", block);
+        d_printf("BLOCK: %u\n", block);
         break;
     case ERROR:
-        printf("TYPE: ERROR");
+        d_printf("TYPE: ERROR");
         unsigned short error_code;
         memcpy(&error_code, buf, sizeof(unsigned short));
         error_code = ntohs(error_code);
-        printf("ERROR CODE: %u", error_code);
+        d_printf("ERROR CODE: %u", error_code);
 
         // NOTICE: here needs 1 byte of 0 to separate mode and end
 
         for (int i = 2; i < len - 1; i++)
         {
-            printf("%c", buf[i]);
+            d_printf("%c", buf[i]);
         }
         break;
     case RRQ:
-        printf("TYPE: RRQ ");
+        d_printf("TYPE: RRQ ");
         for (int i = 2; i < len; i++)
         {
             if (buf[i] != '\0')
             {
-                printf("%c", buf[i]);
+                d_printf("%c", buf[i]);
             }
             else
             {
-                printf(" ");
+                d_printf(" ");
             }
         }
-        printf("\n");
+        d_printf("\n");
         break;
     case WRQ:
-        printf("TYPE: WRQ ");
+        d_printf("TYPE: WRQ ");
         for (int i = 2; i < len; i++)
         {
             if (buf[i] != '\0')
             {
-                printf("%c", buf[i]);
+                d_printf("%c", buf[i]);
             }
             else
             {
-                printf(" ");
+                d_printf(" ");
             }
         }
-        printf("\n");
+        d_printf("\n");
         break;
     default:
         return -2;
@@ -181,7 +176,6 @@ unsigned short get_tftp_packet_block(char *buf)
 
 int tftp_rrq_handler(int server_fd, char *buf, int recv_count, struct sockaddr_in *client_addr)
 {
-
     socklen_t client_addr_len = sizeof(struct sockaddr_in);
     // ready to send data packet
 
@@ -403,16 +397,26 @@ int tftp_wrq_handler(int server_fd, char *buf, int recv_count, struct sockaddr_i
     return 0;
 }
 
-int send_rrq(int client_fd, struct sockaddr_in *ser_addr, char *filename)
+int send_rrq(int client_fd, struct sockaddr_in *ser_addr, char *filename, char _mode)
 {
+    int send_count = 0;
+
     // build RRQ packet
     struct tftp_packet packet = {0};
+start_rrq:
+    memset(&packet, 0, sizeof(struct tftp_packet));
     packet.opcode = htons(RRQ);
     packet.u.request.filename = filename;
     packet.u.request.filename_len = strlen(filename) + 1;
-    char mode[] = "netascii";
-    packet.u.request.mode = &mode[0];
-    packet.u.request.mode_len = strlen(mode) + 1;
+
+    char netascii_mode[] = "netascii";
+    char octet_mode[] = "octet";
+    if (_mode == 1)
+        packet.u.request.mode = &netascii_mode[0];
+    else
+        packet.u.request.mode = &octet_mode[0];
+    // char mode[] = (_mode==1)?"netascii":"octet";
+    packet.u.request.mode_len = (_mode == 1) ? strlen(netascii_mode) + 1 : strlen(octet_mode) + 1;
 
     char *buf = NULL;
 
@@ -431,7 +435,7 @@ int send_rrq(int client_fd, struct sockaddr_in *ser_addr, char *filename)
     int fd = open(filename, O_RDWR | O_CREAT, 0666);
     if (fd < 0)
     {
-        d_printf("open file error!\n");
+        printf("open file error!\n");
         return -1;
     }
 
@@ -441,6 +445,13 @@ int send_rrq(int client_fd, struct sockaddr_in *ser_addr, char *filename)
     // NOTICE: send ACK to this address
     struct sockaddr_in ser_addr_new = {0};
     socklen_t ser_addr_len = sizeof(ser_addr_new);
+
+    int size = 0;
+    time_t start_time = time(NULL);
+    struct timeval start_tv;
+    gettimeofday(&start_tv, NULL);
+
+    struct tftp_packet ack_pkt = {0};
     while (1)
     {
         // One BIG problem: how to restore the data received properly?
@@ -449,7 +460,21 @@ int send_rrq(int client_fd, struct sockaddr_in *ser_addr, char *filename)
 
         if (recv_count < 0 || get_tftp_packet_type(recv_buf) != DATA || get_tftp_packet_block(recv_buf) != block)
         {
+
+            if (block == 0 && send_count < 2)
+            {
+                free(recv_buf);
+                close(fd);
+                send_count++;
+                goto start_rrq;
+            }
             // send error msg
+            if (send_count < 2)
+            {
+                send_count++;
+                block--;
+                goto send_ack;
+            }
 
             unsigned short type = get_tftp_packet_type(recv_buf);
             unsigned short recv_block = get_tftp_packet_block(recv_buf);
@@ -458,20 +483,28 @@ int send_rrq(int client_fd, struct sockaddr_in *ser_addr, char *filename)
             d_printf("type: %d\n", type);
             d_printf("recv_block: %d\n", recv_block);
             d_printf("current_block: %d\n", block);
+            printf("recv error!\n");
 
-            d_printf("recv error!\n");
+            if (get_tftp_packet_block(recv_buf) < block)
+            {
+                d_printf("recv old data, ignore!\n");
+                free(recv_buf);
+                continue;
+            }
+
             free(recv_buf);
             close(fd);
             return -1;
         }
         else if (recv_count > 0)
         {
+            size += recv_count - 4;
             // write data to file
             // well, actually, we should check after write
             int write_msg = write(fd, recv_buf + sizeof(unsigned short) * 2, recv_count - sizeof(unsigned short) * 2);
             if (write_msg < 0)
             {
-                d_printf("write file error!\n");
+                printf("write file error!\n");
                 free(recv_buf);
                 close(fd);
                 return -1;
@@ -479,11 +512,12 @@ int send_rrq(int client_fd, struct sockaddr_in *ser_addr, char *filename)
 
             d_printf("write data to file, block: %u , data_len: %ld\n", block, recv_count - sizeof(unsigned short) * 2);
         }
-
+        send_count = 0;
         // NOTICE: remember to deal with recv_count == 0
         // which indicates end of the whole program
         // send ACK
-        struct tftp_packet ack_pkt = {0};
+    send_ack:
+        memset(&ack_pkt, 0, sizeof(struct tftp_packet));
         ack_pkt.opcode = htons(ACK);
         ack_pkt.u.ack.block = htons(block);
 
@@ -495,7 +529,7 @@ int send_rrq(int client_fd, struct sockaddr_in *ser_addr, char *filename)
 
         if (recv_count == 0 || recv_count < TFTP_MAX_SIZE)
         {
-            d_printf("recv data end\n");
+            printf("recv data end\n");
             break;
         }
         free(ack_buf);
@@ -505,19 +539,35 @@ int send_rrq(int client_fd, struct sockaddr_in *ser_addr, char *filename)
     free(recv_buf);
     close(fd);
 
+    struct timeval end_tv;
+    gettimeofday(&end_tv, NULL);
+
+    printf("recv %d bytes, time: %ldsec\n", size, time(NULL) - start_time);
+
+    printf("speed: %f KB/s\n", (float)size / 1024 / (end_tv.tv_sec - start_tv.tv_sec + (end_tv.tv_usec - start_tv.tv_usec) / 1000000.0));
+
     return 0;
 }
 
-int send_wrq(int client_fd, struct sockaddr_in *ser_addr, char *filename)
+int send_wrq(int client_fd, struct sockaddr_in *ser_addr, char *filename, char _mode)
 {
+
     // build WRQ packet
     struct tftp_packet packet = {0};
+start_wrq:
+    memset(&packet, 0, sizeof(packet));
     packet.opcode = htons(WRQ);
     packet.u.request.filename = filename;
     packet.u.request.filename_len = strlen(filename) + 1;
-    char mode[] = "netascii";
-    packet.u.request.mode = &mode[0];
-    packet.u.request.mode_len = strlen(mode) + 1;
+
+    char netascii_mode[] = "netascii";
+    char octet_mode[] = "octet";
+    if (_mode == 1)
+        packet.u.request.mode = &netascii_mode[0];
+    else
+        packet.u.request.mode = &octet_mode[0];
+    // char mode[] = (_mode==1)?"netascii":"octet";
+    packet.u.request.mode_len = (_mode == 1) ? strlen(netascii_mode) + 1 : strlen(octet_mode) + 1;
 
     char *buf = NULL;
 
@@ -536,7 +586,7 @@ int send_wrq(int client_fd, struct sockaddr_in *ser_addr, char *filename)
     int fd = open(filename, O_RDWR | O_CREAT, 0666);
     if (fd < 0)
     {
-        d_printf("open file error!\n");
+        printf("open file error!\n");
         return -1;
     }
 
@@ -546,18 +596,24 @@ int send_wrq(int client_fd, struct sockaddr_in *ser_addr, char *filename)
     unsigned short block = 0;
     struct sockaddr_in ser_addr_new = {0};
     socklen_t ser_addr_len = sizeof(ser_addr_new);
-
+    /*
     // signal for exceeding time
     struct sigaction sa_alarm;
     sa_alarm.sa_handler = sig_alarm_handler;
     sa_alarm.sa_flags = SA_RESETHAND;
-
+    */
     int end_flag = 0;
+    int size = 0;
+    time_t start_time = time(NULL);
+
+    struct timeval start_tv;
+    gettimeofday(&start_tv, NULL);
+
     while (1)
     {
         memset(recv_buf, 0, TFTP_MAX_SIZE * 2);
-        sigaction(SIGALRM, &sa_alarm, NULL);
-        alarm(5);
+        // sigaction(SIGALRM, &sa_alarm, NULL);
+        // alarm(5);
         recv_count = recvfrom(client_fd, recv_buf, TFTP_MAX_SIZE * 2, 0, (struct sockaddr *)&ser_addr_new, &ser_addr_len);
 
         // handling error messages
@@ -573,7 +629,7 @@ int send_wrq(int client_fd, struct sockaddr_in *ser_addr, char *filename)
             d_printf("recv_block: %d\n", recv_block);
             d_printf("current_block: %d\n", block);
 
-            d_printf("recv error!\n");
+            printf("recv error!\n");
             free(recv_buf);
             close(fd);
             return -1;
@@ -586,9 +642,9 @@ int send_wrq(int client_fd, struct sockaddr_in *ser_addr, char *filename)
             if (data_len < 0)
             {
                 if (block == 1)
-                    d_printf("Send end\n");
+                    printf("Send end\n");
                 else
-                    d_printf("read file error! block: %u\n", block);
+                    printf("read file error! block: %u\n", block);
                 free(recv_buf);
                 free(data_buf);
                 close(fd);
@@ -596,7 +652,7 @@ int send_wrq(int client_fd, struct sockaddr_in *ser_addr, char *filename)
             }
             else if (data_len < TFTP_MAX_SIZE && data_len != 0)
             {
-                d_printf("read file end! block: %u\n", block);
+                printf("read file end! block: %u\n", block);
                 end_flag = 1;
             }
             else if (data_len == 0)
@@ -608,6 +664,12 @@ int send_wrq(int client_fd, struct sockaddr_in *ser_addr, char *filename)
                     free(recv_buf);
                     free(data_buf);
                     close(fd);
+                    printf("recv %d bytes, time: %ldsec\n", size, time(NULL) - start_time);
+
+                    struct timeval end_tv;
+                    gettimeofday(&end_tv, NULL);
+                    printf("speed: %f KB/s\n", (float)size / 1024 / (end_tv.tv_sec - start_tv.tv_sec + (end_tv.tv_usec - start_tv.tv_usec) / 1000000.0));
+
                     return 0;
                 }
                 else
@@ -615,6 +677,8 @@ int send_wrq(int client_fd, struct sockaddr_in *ser_addr, char *filename)
                     end_flag = 1;
                 }
             }
+
+            size += data_len;
 
             block++;
 
@@ -638,7 +702,7 @@ int send_wrq(int client_fd, struct sockaddr_in *ser_addr, char *filename)
             int data_msg = sendto(client_fd, data_buf_new, data_buf_size, 0, (struct sockaddr *)&ser_addr_new, ser_addr_len);
             if (data_msg < 0)
             {
-                d_printf("send data error!\n");
+                printf("send data error!\n");
                 free(recv_buf);
                 free(data_buf_new);
                 close(fd);
@@ -647,5 +711,16 @@ int send_wrq(int client_fd, struct sockaddr_in *ser_addr, char *filename)
         }
     }
 
+    printf("recv %d bytes, time: %ldsec\n", size, time(NULL) - start_time);
+    
+    struct timeval end_tv;
+    gettimeofday(&end_tv, NULL);
+    printf("speed: %f KB/s\n", (float)size / 1024 / (end_tv.tv_sec - start_tv.tv_sec + (end_tv.tv_usec - start_tv.tv_usec) / 1000000.0));
+
     return 0;
+}
+
+void _dprintf(const char *fmt, ...)
+{
+    return;
 }
